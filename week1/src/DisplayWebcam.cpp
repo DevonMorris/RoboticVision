@@ -3,12 +3,15 @@
 
 int main(int argc, char *argv[])
 {
+  // Open default device (Hopefully webcam)
   cv::VideoCapture cap(0);
 
+  // Check to see if successfully opend webcam
   if(!cap.isOpened()){
     std::cout << "Error opening video stream" << std::endl;
   }
 
+  // Display images until quit
   while(1){
     cv::Mat frame;
     cap >> frame;
@@ -27,8 +30,10 @@ int main(int argc, char *argv[])
 
   }
 
+  // Release the default device
   cap.release();
 
+  // Close the windows
   cv::destroyAllWindows();
   return 0;
 }
