@@ -2,6 +2,8 @@
 import numpy as np
 import cv2
 import pygame as pg
+import matplotlib.pyplot as plt
+import transforms3d
 
 from enum import Enum
 
@@ -71,7 +73,7 @@ def filter_image(frame, filt):
 
 def uav_holodeck():
     # Make holodeck environment
-    env = Holodeck.make("UrbanCity")
+    env = Holodeck.make("EuropeanForest")
     env.reset()
 
     gameDisplay = pg.display.set_mode((512, 512))
@@ -83,11 +85,20 @@ def uav_holodeck():
     keys = pg.key.get_pressed()
     command = [0.0, 0.0, 0.0, 0.0]
     filt = 0
+    location = []
+    orientation = []
+    velocity = []
+    imu = []
+
 
     command, filt = filter_keys(keys, command, filt)
 
     while (not keys[pg.K_ESCAPE]):
         state, reward, terminal, _ = env.step(command)
+        location.append(np.copy(state[Sensors.LOCATION_SENSOR]))
+        orientation.append(transforms3d.euler.mat2euler(state[Sensors.ORIENTATION_SENSOR], "rxyz"))
+        velocity.append(np.copy(state[Sensors.VELOCITY_SENSOR]))
+        imu.append(np.copy(state[Sensors.IMU_SENSOR]))
 
         # To access specific sensor data:
         frame = cv2.cvtColor(state[Sensors.PRIMARY_PLAYER_CAMERA], cv2.COLOR_BGRA2RGB)
@@ -103,9 +114,41 @@ def uav_holodeck():
         keys = pg.key.get_pressed()
         command, filt = filter_keys(keys, command, filt)
 
+    cv2.destroyAllWindows()
+    pg.quit()
+
+    location = np.array(location).reshape((-1,3))
+    orientation = np.array(orientation).reshape((-1,3))
+    velocity = np.array(velocity).reshape((-1,3))
+    imu = np.array(imu).reshape((-1,6))
+    
+    print(location.copy())
+
+    plt.figure(0)
+    plt.plot(location)
+    plt.title("Location")
+    plt.legend(("$n$", "$e$", "$h$"))
+    plt.show()
+
+    plt.figure(1)
+    plt.plot(orientation)
+    plt.title("Orientation")
+    plt.legend(("$\phi$", r"$\theta$", "$\psi$"))
+    plt.show()
+
+    plt.figure(2)
+    plt.plot(velocity)
+    plt.title("Velocity")
+    plt.legend(("$u$", "$v$", "$w$"))
+    plt.show()
+
+    plt.figure(3)
+    plt.plot(imu)
+    plt.title("Imu")
+    plt.legend(("$a_x$", "$a_y$", "$a_z$", 
+        "$g_x$", "$g_y$", "$g_z$"))
+    plt.show()
 if __name__ == "__main__":
     pg.init()
     uav_holodeck()
-    cv2.destroyAllWindows()
-    pg.quit()
     print("Finished")
