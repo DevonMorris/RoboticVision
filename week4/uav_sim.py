@@ -12,6 +12,7 @@ from Holodeck.Sensors import Sensors
 from state_plotter import Plotter
 from PID import PID
 import sys
+from OpticFlowControl import OpticFlowControl
 
 ### Command key mappings ###
 # Basic commands
@@ -71,27 +72,22 @@ class UAVSim():
         self.speed_val = 0
 
         # Velocity parmeters
-        self.velocity_teleop = True
         self.vx_c   = 0.0
         self.vy_c   = 0.0
-        self.vy_min = 0.5
-        self.vy_max = 4.0
-        self.vx_min = 0.5
-        self.vx_max = 4.0
+        self.vy_min = -250.0
+        self.vy_max = 250.0
+        self.vx_min = -250.0
+        self.vx_max = 250.0
 
         # PID controllers
-        vx_kp = -0.3
-        vx_kd = -0.05
-        vx_ki = -0.01
+        vx_kp = -self.pitch_max/self.vx_max
+        vx_kd = -0.003
+        vx_ki = -0.001
         self.vx_pid = PID(vx_kp, vx_kd, vx_ki, u_min=-self.pitch_max, u_max=self.pitch_max)
-        vy_kp = 0.3
-        vy_kd = 0.05
-        vy_ki = 0.01
+        vy_kp = self.roll_max/self.vy_max
+        vy_kd = 0.003
+        vy_ki = 0.001
         self.vy_pid = PID(vy_kp, vy_kd, vy_ki, u_min=-self.roll_max, u_max=self.roll_max)
-        yaw_kp = 5.0
-        yaw_kd = 2.5
-        yaw_ki = 0.00
-        self.yaw_pid = PID(yaw_kp, yaw_kd, yaw_ki, u_min=-self.yawrate_max, u_max=self.yawrate_max, angle_wrap=True)
 
         # Mode
         self.mode = Mode.RAW
@@ -125,6 +121,9 @@ class UAVSim():
         print("Initializing {0} world".format(world))
         self.env = Holodeck.make(world)
         self.pressed = {PAUSE: False, MANUAL_TOGGLE: False}
+
+        # optic flow
+        self.of_control = OpticFlowControl()
 
         # prime the environment
         self.reset_sim()
@@ -163,6 +162,11 @@ class UAVSim():
         return self.camera_window
 
     def update_camera_window(self):
+        if self.mode == Mode.OPTICAL_FLOW:
+            img = self.of_control.annotate(self.camera_sensor)
+        else:
+            img = self.camera_sensor
+
         img = self.camera_sensor 
         img = cv2.cvtColor(img , cv2.COLOR_BGRA2RGB)
         img = np.rot90(np.fliplr(img))
@@ -229,28 +233,30 @@ class UAVSim():
         # Lateral motion
         if self.mode == Mode.VELOCITY:
             if keys[VEL_RIGHT]:
-                self.vy_c = (self.vy_min + (self.vy_max - self.vy_min)*self.speed_val)
-                self.teleop_text = "VEL_RIGHT"
+                self.vy_c += (self.vy_max - self.vy_min)*.01
+                self.vy_c = min(self.vy_c, self.vy_max)
+                self.teleop_text = "VEL_RIGHT at {0:.2f}".format(self.vy_c)
             if keys[VEL_LEFT]:
-                self.vy_c = -(self.vy_min + (self.vy_max - self.vy_min)*self.speed_val)
-                self.teleop_text = "VEL_LEFT"
+                self.vy_c -= (self.vy_max - self.vy_min)*.01
+                self.vy_c = max(self.vy_c, self.vy_min)
+                self.teleop_text = "VEL_LEFT at {0:.2f}".format(self.vy_c)
             if keys[VEL_FORWARD]:
-                self.vx_c = (self.vx_min + (self.vx_max - self.vx_min)*self.speed_val)
-                self.teleop_text = "VEL_FORWARD"
+                self.vx_c += (self.vx_max - self.vx_min)*.01
+                self.vx_c = min(self.vx_c, self.vx_max)
+                self.teleop_text = "VEL_FORWARD at {0:.2f}".format(self.vx_c)
             if keys[VEL_BACKWARD]:
-                self.vx_c = -(self.vx_min + (self.vx_max - self.vx_min)*self.speed_val)
-                self.teleop_text = "VEL_BACKWARD"
+                self.vx_c -= (self.vx_max - self.vx_min)*.01
+                self.vx_c = max(self.vx_c, self.vx_min)
+                self.teleop_text = "VEL_BACKWARD at {0:.2f}".format(self.vx_c)
             # z-rotation
             if keys[YAW_LEFT]:
-                self.yaw_c += (self.yawrate_min + (self.yawrate_max - self.yawrate_min)*self.speed_val)*self.dt
-                if self.yaw_c > math.pi:
-                    self.yaw_c -= 2*math.pi
-                self.teleop_text = "YAW_LEFT"
+                self.yawrate_c += (self.yawrate_max - self.yawrate_min)*.01 
+                self.yawrate_c = min(self.yawrate_c, self.yawrate_max)
+                self.teleop_text = "YAW_LEFT at {0:.2f}".format(self.yawrate_c)
             if keys[YAW_RIGHT]:
-                self.yaw_c -= (self.yawrate_min + (self.yawrate_max - self.yawrate_min)*self.speed_val)*self.dt
-                if self.yaw_c < -math.pi:
-                    self.yaw_c += 2*math.pi
-                self.teleop_text = "YAW_RIGHT"
+                self.yawrate_c -= (self.yawrate_max - self.yawrate_min)*.01 
+                self.yawrate_c = max(self.yawrate_c, self.yawrate_min)
+                self.teleop_text = "YAW_RIGHT at {0:.2f}".format(self.yawrate_c)
 
         elif self.mode == Mode.RAW:
             if keys[ROLL_RIGHT]:
@@ -302,7 +308,7 @@ class UAVSim():
             self.compute_raw_control()
         if self.mode == Mode.VELOCITY:
             self.compute_velocity_control()
-        if self.mode == Mode.OPTICAL_FLOW
+        if self.mode == Mode.OPTICAL_FLOW:
             self.compute_optical_control()
 
     def compute_raw_control(self):
@@ -318,8 +324,11 @@ class UAVSim():
         # Compute PID control
         self.pitch_c = self.vx_pid.compute_control(vx, self.vx_c, self.dt)
         self.roll_c = self.vy_pid.compute_control(vy, self.vy_c, self.dt)
-        self.yawrate_c = self.yaw_pid.compute_control(yaw, self.yaw_c, self.dt)
         self.set_command(self.roll_c, self.pitch_c, self.yawrate_c, self.alt_c)
+
+    def compute_optical_control(self):
+        self.of_control.calc_optic_flow()
+        #self.set_command(self.control_optic_flow)
 
 
     ######## Data access ########
@@ -370,6 +379,7 @@ class UAVSim():
         # Step holodeck simulator
         if not self.paused:
             self.sim_step += 1
+            self.compute_control()
             self.sim_state, self.sim_reward, self.sim_terminal, self.sim_info = self.env.step(self.command)
             self.extract_sensor_data() # Get and store sensor data from state
             if self.plotting_states:
@@ -398,7 +408,6 @@ class UAVSim():
         # Re-initialize controllers
         self.vx_pid.reset()
         self.vy_pid.reset()
-        self.yaw_pid.reset()
 
         # Reset the holodeck
         self.env.reset()
@@ -407,7 +416,6 @@ class UAVSim():
         self.roll_c = 0.0
         self.pitch_c = 0.0
         self.yawrate_c = 0.0
-        self.alt_c = 0.0
         self.vx_c = 0.0
         self.vy_c = 0.0
         self.yaw_c = 0.0
@@ -415,7 +423,6 @@ class UAVSim():
         # Re-initialize controllers
         self.vx_pid.reset()
         self.vy_pid.reset()
-        self.yaw_pid.reset()
 
     def exit_sim(self):
         sys.exit()
