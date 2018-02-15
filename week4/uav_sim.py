@@ -171,7 +171,6 @@ class UAVSim():
         rect = block.get_rect()
         rect.center = (256, 475)
         self.camera_window.blit(block, rect)
-        pg.display.flip()
         pg.display.update()
 
     def process_teleop(self):
@@ -376,7 +375,7 @@ class UAVSim():
             self.compute_control()
             self.sim_state, self.sim_reward, self.sim_terminal, self.sim_info = self.env.step(self.command)
             self.extract_sensor_data() # Get and store sensor data from state
-            self.of_control.calc_optic_flow(self.get_camera())
+            self.of_control.calc_optic_flow(np.copy(self.get_camera()))
             if self.plotting_states:
                 t = self.sim_step*self.dt
                 self.plotter.add_vector_measurement("position", self.get_position(), t)
