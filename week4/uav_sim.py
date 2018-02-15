@@ -12,7 +12,7 @@ from Holodeck.Sensors import Sensors
 from state_plotter import Plotter
 from PID import PID
 import sys
-from OpticFlowControl import OpticFlowControl
+from optic_flow_control import OpticFlowControl
 
 ### Command key mappings ###
 # Basic commands
@@ -123,7 +123,7 @@ class UAVSim():
         self.pressed = {PAUSE: False, MANUAL_TOGGLE: False}
 
         # optic flow
-        self.of_control = OpticFlowControl()
+        self.of_control = OpticFlowControl(512,512)
 
         # prime the environment
         self.reset_sim()
@@ -162,12 +162,7 @@ class UAVSim():
         return self.camera_window
 
     def update_camera_window(self):
-        if self.mode == Mode.OPTICAL_FLOW:
-            img = self.of_control.annotate(self.camera_sensor)
-        else:
-            img = self.camera_sensor
-
-        img = self.camera_sensor 
+        img = self.of_control.annotate(self.camera_sensor)
         img = cv2.cvtColor(img , cv2.COLOR_BGRA2RGB)
         img = np.rot90(np.fliplr(img))
         img = pg.surfarray.make_surface(img)
@@ -327,8 +322,7 @@ class UAVSim():
         self.set_command(self.roll_c, self.pitch_c, self.yawrate_c, self.alt_c)
 
     def compute_optical_control(self):
-        self.of_control.calc_optic_flow()
-        #self.set_command(self.control_optic_flow)
+        command = self.of_control.control_optic_flow()
 
 
     ######## Data access ########
@@ -382,6 +376,7 @@ class UAVSim():
             self.compute_control()
             self.sim_state, self.sim_reward, self.sim_terminal, self.sim_info = self.env.step(self.command)
             self.extract_sensor_data() # Get and store sensor data from state
+            self.of_control.calc_optic_flow(self.get_camera())
             if self.plotting_states:
                 t = self.sim_step*self.dt
                 self.plotter.add_vector_measurement("position", self.get_position(), t)
