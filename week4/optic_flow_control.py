@@ -25,21 +25,21 @@ class OpticFlowControl():
                                criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 1, 0.03))
 
         self.feature_params = dict( maxCorners = 1000,
-                       qualityLevel = 0.3,
+                       qualityLevel = 0.03,
                        minDistance = 7,
                        blockSize = 7 )
 
         # setup center mask
         self.center_mask = np.zeros((img_height, img_width), dtype=np.uint8)
         cv2.rectangle(self.center_mask, 
-                (self.c_center[0] - 150, self.c_center[1] - 100),
-                (self.c_center[0] + 150, self.c_center[1] + 100),
+                (self.c_center[0] - 200, self.c_center[1] - 100),
+                (self.c_center[0] + 200, self.c_center[1] + 100),
                 color=255, thickness=cv2.FILLED)
 
         self.draw_center = np.zeros((img_height, img_width, 4), dtype=np.uint8)
         cv2.rectangle(self.draw_center, 
-                (self.c_center[0] - 150, self.c_center[1] - 100),
-                (self.c_center[0] + 150, self.c_center[1] + 100),
+                (self.c_center[0] - 200, self.c_center[1] - 100),
+                (self.c_center[0] + 200, self.c_center[1] + 100),
                 color=(0, 0, 255, 0.5), thickness=1)
 
         # Setup right mask
@@ -164,6 +164,20 @@ class OpticFlowControl():
         self.p_down = cv2.goodFeaturesToTrack(self.prev_img, 
                 mask= self.down_mask, **self.feature_params)
 
+        # Add at least one point
+        if self.p_center is None:
+            self.p_center = np.array([[[self.c_center[0],self.c_center[1]]]],
+                    dtype=np.float32)
+        if self.p_right is None:
+            self.p_right = np.array([[[self.r_center[0],self.r_center[1]]]],
+                    dtype=np.float32)
+        if self.p_left is None:
+            self.p_left = np.array([[[self.l_center[0],self.l_center[1]]]],
+                    dtype=np.float32)
+        if self.p_down is None:
+            self.p_down = np.array([[[self.d_center[0],self.d_center[1]]]],
+                    dtype=np.float32)
+
         # calculate center flow
         self.c_flow, st, err = cv2.calcOpticalFlowPyrLK(self.prev_img, img_gray, 
                 self.p_center, None, **self.of_params)
@@ -188,8 +202,39 @@ class OpticFlowControl():
         self.prev_img = img_gray
 
 
-    def control_optic_flow(self, img):
-        return None
+    def control_optic_flow(self, phi, theta, imu):
+        roll_rate = imu[3] 
+        pitch_rate = imu[4]
+        yaw_rate = imu[5]
+
+        kpvy = 10
+        kpyaw = .2
+
+        self.r_flow = self.r_flow - self.p_right
+        self.l_flow = self.l_flow - self.p_left
+        self.c_flow = self.c_flow - self.p_center
+
+        # correct for yaw_rate
+        self.r_flow[:,0,0] -= yaw_rate*(1. + ((self.p_right[:,0,0]-256)/256.)**2) 
+        self.l_flow[:,0,0] -= yaw_rate*(1. + ((self.p_left[:,0,0]-256)/256.)**2)
+        self.c_flow[:,0,0] -= yaw_rate*(1. + ((self.p_center[:,0,0]-256)/256.)**2)
+
+        # correct for pitch_rate
+        self.r_flow[:,0,1] += pitch_rate*(1. + ((self.p_right[:,0,1]-256)/256.)**2)
+        self.l_flow[:,0,1] += pitch_rate*(1. + ((self.p_left[:,0,1]-256)/256.)**2)
+        self.c_flow[:,0,1] += pitch_rate*(1. + ((self.p_center[:,0,1]-256)/256.)**2)
+        
+        self.r_avg = np.mean(self.r_flow, axis=(0,1))
+        self.l_avg = np.mean(self.l_flow, axis=(0,1))
+        self.c_avg = np.mean(self.c_flow, axis=(0,1))
+
+
+        vy = -(self.r_avg[0] + self.l_avg[0])*kpvy
+        yr = -(self.r_avg[0] + self.l_avg[0])*kpyaw
+        print(yr)
+
+        # vx, vy, yaw_rate, altitude
+        return 250.0, vy, yr, 5.0
 
 
 

@@ -80,12 +80,12 @@ class UAVSim():
         self.vx_max = 250.0
 
         # PID controllers
-        vx_kp = -self.pitch_max/self.vx_max
-        vx_kd = -0.003
+        vx_kp = -0.1*self.pitch_max/self.vx_max
+        vx_kd = -0.001
         vx_ki = -0.001
         self.vx_pid = PID(vx_kp, vx_kd, vx_ki, u_min=-self.pitch_max, u_max=self.pitch_max)
-        vy_kp = self.roll_max/self.vy_max
-        vy_kd = 0.003
+        vy_kp = 0.5*self.roll_max/self.vy_max
+        vy_kd = 0.001
         vy_ki = 0.001
         self.vy_pid = PID(vy_kp, vy_kd, vy_ki, u_min=-self.roll_max, u_max=self.roll_max)
 
@@ -321,7 +321,24 @@ class UAVSim():
         self.set_command(self.roll_c, self.pitch_c, self.yawrate_c, self.alt_c)
 
     def compute_optical_control(self):
-        command = self.of_control.control_optic_flow()
+        # Get current state
+        euler = self.get_euler()
+        phi = euler[0]
+        theta = euler[1]
+
+        imu = self.get_imu()
+
+        vel = self.get_body_velocity()
+        vx = vel[0]
+        vy = vel[1]
+
+        command = self.of_control.control_optic_flow(phi, theta, imu)
+        self.roll_c = self.vy_pid.compute_control(vy , command[1], self.dt)
+        self.pitch_c = self.vx_pid.compute_control(vx, command[0], self.dt)
+        self.yawrate_c = command[2]
+        self.alt_c = command[3]
+
+        self.set_command(self.roll_c, self.pitch_c, self.yawrate_c, self.alt_c)
 
 
     ######## Data access ########
