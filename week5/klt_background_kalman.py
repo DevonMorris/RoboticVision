@@ -57,9 +57,15 @@ kf.statePre = np.array([roi[0],  roi[1], 0., 0., 0., 0., 0., 0.], dtype=np.float
 kf.errorCovPre = .1*np.eye(8, dtype=np.float32)
 kf.controlMatrix = np.zeros((8,1), dtype=np.float32)
 
+bg_sub = cv2.createBackgroundSubtractorMOG2(varThreshold = 40., detectShadows=False)
+bg_sub.apply(img)
+
 while(1):
     ret, img = cap.read()
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    bg_mask = bg_sub.apply(img)
+    bg_mask = cv2.morphologyEx(bg_mask, cv2.MORPH_OPEN, (7,7), iterations=3)
+    bg_mask = cv2.morphologyEx(bg_mask, cv2.MORPH_CLOSE, (7,7), iterations=3)
     # calculate optical flow
     p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, img_gray, p0, None, **lk_params)
 
@@ -69,7 +75,7 @@ while(1):
 
     x = np.mean(good_new, axis=0)
     flow = good_new - good_old
-    flow = flow[np.linalg.norm(flow, axis=1) > .5]
+    flow = flow[np.linalg.norm(flow, axis=1) > .25]
 
     if flow.size != 0:
         flow = np.mean(flow, axis = 0)
@@ -91,6 +97,7 @@ while(1):
 
 
     cv2.imshow('frame',img)
+    cv2.imshow('bg_sub', bg_mask)
     k = cv2.waitKey(30) & 0xff
     if k == 27:
         break
@@ -106,7 +113,10 @@ while(1):
             int(roi[0]):int(roi[0]+roi[2])] = True
 
     p0 = good_new.reshape(-1, 1, 2)
-    p0 = cv2.goodFeaturesToTrack(old_gray, mask = mask, **feature_params)
+    p0_new = cv2.goodFeaturesToTrack(old_gray, mask = mask*bg_mask, **feature_params)
+    if p0_new is not None:
+        p0 = p0_new
+        
 
     # predict forward kf
     kf.predict()
