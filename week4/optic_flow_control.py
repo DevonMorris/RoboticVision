@@ -10,6 +10,8 @@ class OpticFlowControl():
         img_width - image width in pixels
         of_res - number of OF points along each axis
         '''
+        self.yr = 0
+
         self.prev_img = np.zeros((img_height,img_width))
         self.c_avg = np.zeros(2)
         self.l_avg = np.zeros(2)
@@ -24,7 +26,7 @@ class OpticFlowControl():
                                maxLevel = 3,
                                criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 1, 0.03))
 
-        self.feature_params = dict( maxCorners = 1000,
+        self.feature_params = dict( maxCorners = 100,
                        qualityLevel = 0.03,
                        minDistance = 7,
                        blockSize = 7 )
@@ -45,40 +47,40 @@ class OpticFlowControl():
         # Setup right mask
         self.right_mask = np.zeros((img_height, img_width), dtype=np.uint8)
         cv2.rectangle(self.right_mask, 
-                (self.r_center[0] - 100, self.r_center[1] - 150),
-                (self.r_center[0] + 100, self.r_center[1] + 150),
+                (self.r_center[0] - 150, self.r_center[1] - 150),
+                (self.r_center[0] + 150, self.r_center[1] + 150),
                 color=255, thickness=cv2.FILLED)
 
         self.draw_right = np.zeros((img_height, img_width, 4), dtype=np.uint8)
         cv2.rectangle(self.draw_right, 
-                (self.r_center[0] - 100, self.r_center[1] - 150),
-                (self.r_center[0] + 100, self.r_center[1] + 150),
+                (self.r_center[0] - 150, self.r_center[1] - 150),
+                (self.r_center[0] + 150, self.r_center[1] + 150),
                 color=(0, 255, 0, 0.5), thickness=1)
 
         # Setup left mask
         self.left_mask = np.zeros((img_height, img_width), dtype=np.uint8)
         cv2.rectangle(self.left_mask, 
-                (self.l_center[0] - 100, self.l_center[1] - 150),
-                (self.l_center[0] + 100, self.l_center[1] + 150),
+                (self.l_center[0] - 150, self.l_center[1] - 150),
+                (self.l_center[0] + 150, self.l_center[1] + 150),
                 color=255, thickness=cv2.FILLED)
 
         self.draw_left = np.zeros((img_height, img_width, 4), dtype=np.uint8)
         cv2.rectangle(self.draw_left, 
-                (self.l_center[0] - 100, self.l_center[1] - 150),
-                (self.l_center[0] + 100, self.l_center[1] + 150),
+                (self.l_center[0] - 150, self.l_center[1] - 150),
+                (self.l_center[0] + 150, self.l_center[1] + 150),
                 color=(0, 255, 0, 0.5), thickness=1)
 
         # Setup down mask
         self.down_mask = np.zeros((img_height, img_width), dtype=np.uint8)
         cv2.rectangle(self.down_mask, 
-                (self.d_center[0] - 100, self.d_center[1] - 100),
-                (self.d_center[0] + 100, self.d_center[1] + 100),
+                (self.d_center[0] - 125, self.d_center[1] - 100),
+                (self.d_center[0] + 125, self.d_center[1] + 100),
                 color=255, thickness=cv2.FILLED)
 
         self.draw_down = np.zeros((img_height, img_width, 4), dtype=np.uint8)
         cv2.rectangle(self.draw_down, 
-                (self.d_center[0] - 100, self.d_center[1] - 100),
-                (self.d_center[0] + 100, self.d_center[1] + 100),
+                (self.d_center[0] - 125, self.d_center[1] - 100),
+                (self.d_center[0] + 125, self.d_center[1] + 100),
                 color=(255, 0, 0, 0.5), thickness=1)
 
         self.first = True
@@ -207,17 +209,16 @@ class OpticFlowControl():
         pitch_rate = imu[4]
         yaw_rate = imu[5]
 
-        kpvy = 10
-        kpyaw = .2
+        kpyaw = 10
 
         self.r_flow = self.r_flow - self.p_right
         self.l_flow = self.l_flow - self.p_left
         self.c_flow = self.c_flow - self.p_center
 
         # correct for yaw_rate
-        self.r_flow[:,0,0] -= yaw_rate*(1. + ((self.p_right[:,0,0]-256)/256.)**2) 
-        self.l_flow[:,0,0] -= yaw_rate*(1. + ((self.p_left[:,0,0]-256)/256.)**2)
-        self.c_flow[:,0,0] -= yaw_rate*(1. + ((self.p_center[:,0,0]-256)/256.)**2)
+        #self.r_flow[:,0,0] -= 256*yaw_rate*(1. + ((self.p_right[:,0,0]-256)/256.)**2)/30.
+        #self.l_flow[:,0,0] -= 256*yaw_rate*(1. + ((self.p_left[:,0,0]-256)/256.)**2)/30.
+        #self.c_flow[:,0,0] -= 256*yaw_rate*(1. + ((self.p_center[:,0,0]-256)/256.)**2)/30.
 
         # correct for pitch_rate
         self.r_flow[:,0,1] += pitch_rate*(1. + ((self.p_right[:,0,1]-256)/256.)**2)
@@ -228,13 +229,20 @@ class OpticFlowControl():
         self.l_avg = np.mean(self.l_flow, axis=(0,1))
         self.c_avg = np.mean(self.c_flow, axis=(0,1))
 
+        self.r_avg[0] -= 256*yaw_rate*(1. + ((self.r_center[0] - 256)/256)**2)/30.
+        self.l_avg[0] -= 256*yaw_rate*(1. + ((self.l_center[0] - 256)/256)**2)/30.
 
-        vy = -(self.r_avg[0] + self.l_avg[0])*kpvy
+
+        #vy = -(self.r_avg[0] + self.l_avg[0])*kpvy
+        vy = 0.0
         yr = -(self.r_avg[0] + self.l_avg[0])*kpyaw
-        print(yr)
+        if yr > 25:
+            self.yr = 1
+        elif yr < -25:
+            self.yr = -1
 
         # vx, vy, yaw_rate, altitude
-        return 250.0, vy, yr, 5.0
+        return 10., vy, self.yr, 5.0
 
 
 

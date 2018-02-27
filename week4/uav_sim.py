@@ -80,7 +80,7 @@ class UAVSim():
         self.vx_max = 250.0
 
         # PID controllers
-        vx_kp = -0.1*self.pitch_max/self.vx_max
+        vx_kp = -self.pitch_max/self.vx_max
         vx_kd = -0.001
         vx_ki = -0.001
         self.vx_pid = PID(vx_kp, vx_kd, vx_ki, u_min=-self.pitch_max, u_max=self.pitch_max)
